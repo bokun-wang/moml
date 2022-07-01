@@ -74,7 +74,6 @@ class MAML():
         all_iters = []
         all_meta_losses = []
         avg_time = 0
-        all_gnorms = []
 
         timer = Timer()
 
@@ -103,10 +102,8 @@ class MAML():
             meta_grads = torch.autograd.grad(meta_loss, self.weights)
 
             # assign meta gradient to weights and take optimization step
-            gnorm_sq = 0.0
             for w, g in zip(self.weights, meta_grads):
                 w.grad = g
-                gnorm_sq += np.linalg.norm(g, ord=2) ** 2
 
             for param in self.model.parameters():
                 param.data -= self.meta_lr * param.grad.data
@@ -115,7 +112,6 @@ class MAML():
 
             # log metrics
             if iteration % self.plot_every == 0:
-                all_gnorms.append(np.sqrt(gnorm_sq))
                 eval_loss = torch.Tensor([0])
                 for id in range(self.N_tasks):
                     # compute meta loss
@@ -130,4 +126,4 @@ class MAML():
 
         avg_time *= 1000.0
 
-        return all_meta_losses, all_iters, avg_time, all_gnorms
+        return all_meta_losses, all_iters, avg_time

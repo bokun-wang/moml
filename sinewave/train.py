@@ -32,7 +32,6 @@ def train(args):
 
     ## initialize the logs
     all_tr_loss = {}
-    all_gnorms = {}
     final_te_loss = []
     all_tr_samples = {}
     all_avg_time = []
@@ -43,43 +42,37 @@ def train(args):
         if args.alg == 'MAML':
             loss = MAML(model, all_tasks, inner_lr=lr_i, meta_lr=args.lr, K=args.K,
                         N_tasks=N_tasks, B_tasks=B_tasks, seed=seed)
-            tr_losses, tr_iters, avg_time, gnorms = loss.main_loop(num_iterations=total_iterations)
+            tr_losses, tr_iters, avg_time = loss.main_loop(num_iterations=total_iterations)
             tr_samples = np.multiply(tr_iters, B_tasks * args.K)
         elif args.alg == 'MOML':
             loss = MOML(model, all_tasks, inner_lr=lr_i, meta_lr=args.lr, K=args.K, N_tasks=N_tasks,
                         B_tasks=B_tasks, seed=seed, beta=args.beta)
             tr_losses, tr_iters, avg_time = loss.main_loop(num_iterations=total_iterations)
             tr_samples = np.multiply(tr_iters, B_tasks * args.K)
-            gnorms = None
         elif args.alg == 'MOML-V2':
             loss = MOMLV2(model, all_tasks, inner_lr=lr_i, meta_lr=args.lr, K=args.K, N_tasks=N_tasks,
                           B_tasks=B_tasks, seed=seed, beta=args.beta)
             tr_losses, tr_iters, avg_time = loss.main_loop(num_iterations=total_iterations)
             tr_samples = np.multiply(tr_iters, B_tasks * args.K)
-            gnorms = None
         elif args.alg == 'LocalMOML':
             ratio = (args.K0 + args.K * H) / (args.K * H)
             loss = LCMOML(model, all_tasks, inner_lr=lr_i, meta_lr=args.lr,
                           K=args.K, N_tasks=N_tasks, B_tasks=B_tasks, seed=seed, beta=args.beta, K0=args.K0, H=H)
             tr_losses, tr_iters, avg_time = loss.main_loop(num_iterations=int(total_iterations // ratio))
             tr_samples = np.multiply(tr_iters, B_tasks * args.K * ratio)
-            gnorms = None
         elif args.alg == 'NASA':
             loss = NASA(model, all_tasks, inner_lr=lr_i, meta_lr=args.lr,
                         K=args.K, B_tasks=B_tasks, N_tasks=N_tasks, seed=seed, beta=args.beta, grad_mom=args.grad_mom)
             tr_losses, tr_iters, avg_time = loss.main_loop(
                 num_iterations=int((total_iterations * B_tasks) / N_tasks))
             tr_samples = np.multiply(tr_iters, N_tasks * args.K)
-            gnorms = None
         elif args.alg == 'BSpiderBoost':
             loss = SpiderBoost(model, all_tasks, inner_lr=lr_i, meta_lr=args.lr, K=args.K,
                                N_tasks=N_tasks, N1=N1, N2=B_tasks, q=q, seed=seed)
             tr_losses, tr_samples, avg_time = loss.main_loop(
                 num_iterations=int(total_iterations * B_tasks // (N1 / q + B_tasks * (q - 1) / q)))
-            gnorms = None
         else:
             loss = None
-            gnorms = None
             raise ValueError("Unknown algorithm!")
 
         # test
@@ -118,7 +111,6 @@ def train(args):
         np.savez(file_name, gt_x=all_gt_x, gt_y=all_gt_y, predicted=all_predicted, te_loss=all_te_loss)
         ################################################
         all_tr_loss[seed] = tr_losses
-        all_gnorms[seed] = gnorms
         all_tr_samples[seed] = np.array(tr_samples).astype(np.float64)
         final_te_loss.append(avg_te_loss)
         all_avg_time.append(avg_time)
@@ -127,20 +119,15 @@ def train(args):
     file_name = './results/{}_{}_traces.npz'.format(args.alg, args.K)
     avg_tr_loss = np.zeros_like(all_tr_loss[seeds[0]])
     std_tr_loss = np.zeros_like(all_tr_loss[seeds[0]])
-    avg_gnorms = np.zeros_like(all_gnorms[seeds[0]])
-    std_gnorms = np.zeros_like(all_gnorms[seeds[0]])
     avg_tr_samples = np.zeros_like(all_tr_samples[seeds[0]])
     for seed in seeds:
         avg_tr_loss += np.array(all_tr_loss[seed]) / float(len(seeds))
-        avg_gnorms += np.array(all_gnorms[seed]) / float(len(seeds))
         avg_tr_samples += np.array(all_tr_samples[seed]) / float(len(seeds))
     for seed in seeds:
         std_tr_loss += (np.array(all_tr_loss[seed]) - avg_tr_loss) ** 2 / float(len(seeds))
-        std_gnorms += (np.array(all_gnorms[seed]) - avg_gnorms) ** 2 / float(len(seeds))
     std_tr_loss = np.sqrt(std_tr_loss)
-    std_gnorms = np.sqrt(std_gnorms)
     np.savez(file_name, final_te_loss=final_te_loss, all_avg_time=all_avg_time, avg_tr_loss=avg_tr_loss,
-             std_tr_loss=std_tr_loss, avg_gnorms=avg_gnorms, std_gnorms=std_gnorms,
+             std_tr_loss=std_tr_loss,
              avg_tr_samples=avg_tr_samples)
 
     print("{0}: final test error: avg:{1}, std:{2}, time per iteration: avg:{3}, std:{4}".format(args.alg,
